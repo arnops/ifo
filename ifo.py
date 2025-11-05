@@ -2,11 +2,12 @@
 """
 IFO - Identified Flying Object CLI
 
-Query aircraft flying over a location using coordinates.
+Query aircraft flying over a location using coordinates or place name.
 """
 import argparse
 import sys
 from api import OpenSkyAPI
+from geocoding import Geocoder
 
 
 def parse_coordinates(coord_str: str) -> tuple[float, float]:
@@ -67,18 +68,25 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Examples:
-  %(prog)s --coords "37.7,-122.4"          # San Francisco
-  %(prog)s --coords "51.5,-0.1"            # London
-  %(prog)s --coords "40.7,-74.0" --radius 1.0  # New York, 1 degree radius
+  %(prog)s --coords "37.7,-122.4"          # Coordinates
+  %(prog)s --place "San Francisco"         # Place name
+  %(prog)s --place "London, UK"            # Place with country
+  %(prog)s --coords "40.7,-74.0" --radius 1.0  # Custom radius
         '''
     )
 
-    parser.add_argument(
+    location_group = parser.add_mutually_exclusive_group(required=True)
+    location_group.add_argument(
         '--coords',
         type=str,
-        required=True,
         metavar='LAT,LON',
         help='Location coordinates in format "latitude,longitude" (e.g., "37.7,-122.4")'
+    )
+    location_group.add_argument(
+        '--place',
+        type=str,
+        metavar='NAME',
+        help='Place name (e.g., "San Francisco" or "London, UK")'
     )
 
     parser.add_argument(
@@ -100,8 +108,21 @@ Examples:
     args = parser.parse_args()
 
     try:
-        # Parse coordinates
-        lat, lon = parse_coordinates(args.coords)
+        # Get coordinates (either from direct coords or geocoding)
+        if args.coords:
+            lat, lon = parse_coordinates(args.coords)
+            location_name = f"{lat},{lon}"
+        else:
+            # Geocode place name
+            with Geocoder(timeout=args.timeout) as geocoder:
+                result = geocoder.geocode(args.place)
+                if not result:
+                    print(f"Error: Could not find location '{args.place}'", file=sys.stderr)
+                    return 1
+                lat = result['lat']
+                lon = result['lon']
+                location_name = result['display_name']
+                print(f"Found location: {location_name} ({lat:.4f}, {lon:.4f})")
 
         # Create bounding box
         lat_min, lon_min, lat_max, lon_max = create_bounding_box(lat, lon, args.radius)
@@ -112,10 +133,10 @@ Examples:
 
         # Display results
         if not aircraft:
-            print(f"No aircraft found near {lat},{lon}")
+            print(f"No aircraft found near {location_name}")
             return 0
 
-        print(f"Found {len(aircraft)} aircraft near {lat},{lon}:\n")
+        print(f"Found {len(aircraft)} aircraft near {location_name}:\n")
         for ac in aircraft:
             print(f"Callsign: {ac['callsign'] or 'N/A'}")
             print(f"  ICAO24: {ac['icao24']}")

@@ -2,7 +2,7 @@
 Tests for the IFO CLI.
 """
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 import ifo
 
 
@@ -177,3 +177,50 @@ class TestMain:
         assert call_args[1] == pytest.approx(-123.4)  # lon_min
         assert call_args[2] == pytest.approx(38.7)  # lat_max
         assert call_args[3] == pytest.approx(-121.4)  # lon_max
+
+    @patch('ifo.Geocoder')
+    @patch('ifo.OpenSkyAPI')
+    @patch('sys.argv', ['ifo.py', '--place', 'San Francisco'])
+    def test_main_with_place_name(self, mock_api_class, mock_geocoder_class, capsys):
+        """Test with place name geocoding."""
+        # Setup geocoder mock
+        mock_geocoder = Mock()
+        mock_geocoder.__enter__ = Mock(return_value=mock_geocoder)
+        mock_geocoder.__exit__ = Mock(return_value=False)
+        mock_geocoder.geocode.return_value = {
+            'lat': 37.7749,
+            'lon': -122.4194,
+            'display_name': 'San Francisco, California, USA'
+        }
+        mock_geocoder_class.return_value = mock_geocoder
+
+        # Setup API mock
+        mock_api = Mock()
+        mock_api.__enter__ = Mock(return_value=mock_api)
+        mock_api.__exit__ = Mock(return_value=False)
+        mock_api.get_aircraft_in_area.return_value = []
+        mock_api_class.return_value = mock_api
+
+        result = ifo.main()
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "San Francisco, California, USA" in captured.out
+        assert "37.7749" in captured.out
+        mock_geocoder.geocode.assert_called_once_with('San Francisco')
+
+    @patch('ifo.Geocoder')
+    @patch('sys.argv', ['ifo.py', '--place', 'NonexistentPlace12345'])
+    def test_main_place_not_found(self, mock_geocoder_class, capsys):
+        """Test with place name that cannot be geocoded."""
+        mock_geocoder = Mock()
+        mock_geocoder.__enter__ = Mock(return_value=mock_geocoder)
+        mock_geocoder.__exit__ = Mock(return_value=False)
+        mock_geocoder.geocode.return_value = None
+        mock_geocoder_class.return_value = mock_geocoder
+
+        result = ifo.main()
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Could not find location" in captured.err
