@@ -1,0 +1,36 @@
+# Git Commit Signing
+
+This repository uses SSH-based commit signing for authenticity verification.
+
+## Configuration
+
+All commits and tags are signed using SSH keys (Git 2.34+).
+
+- Format: SSH
+- Signing enabled: commits and tags
+- Public key: see allowed_signers file
+
+## Verification
+
+To verify signatures locally:
+```bash
+git log --show-signature
+```
+
+## For Contributors
+
+If you want to contribute with signed commits:
+1. Generate an SSH key if you don't have one: `ssh-keygen -t ed25519 -C "your_email@example.com"`
+2. Configure git to use SSH signing:
+   ```bash
+   git config --global gpg.format ssh
+   git config --global user.signingkey ~/.ssh/id_ed25519.pub
+   git config --global commit.gpgsign true
+   git config --global tag.gpgsign true
+   ```
+3. Add your SSH public key to GitLab (Settings → SSH Keys)
+4. Enable SSH signature verification in GitLab (Settings → SSH Keys → Enable SSH signature verification)
+
+## CI/CD
+
+GitLab CI/CD handles signed commits transparently. No special configuration needed.

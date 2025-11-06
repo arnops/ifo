@@ -1,0 +1,234 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests
+        run: cargo test --all-features --verbose
+
+  build:
+    name: Build
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            name: linux-x86_64
+            use_zigbuild: false
+          - target: x86_64-apple-darwin
+            name: macos-x86_64
+            use_zigbuild: true
+          - target: aarch64-apple-darwin
+            name: macos-aarch64
+            use_zigbuild: true
+          - target: x86_64-pc-windows-gnu
+            name: windows-x86_64
+            use_zigbuild: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Zig (for cargo-zigbuild)
+        if: matrix.use_zigbuild
+        run: |
+          wget -q https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz
+          tar -xf zig-linux-x86_64-0.13.0.tar.xz
+          echo "$PWD/zig-linux-x86_64-0.13.0" >> $GITHUB_PATH
+
+      - name: Install cargo-zigbuild
+        if: matrix.use_zigbuild
+        run: cargo install cargo-zigbuild
+
+      - name: Install MinGW (for Windows target)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        run: sudo apt-get update && sudo apt-get install -y mingw-w64
+
+      - name: Add Rust target
+        if: matrix.use_zigbuild
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Build binary (native)
+        if: ${{ !matrix.use_zigbuild }}
+        run: cargo build --release
+
+      - name: Build binary (cross-compile with zigbuild)
+        if: matrix.use_zigbuild
+        run: cargo zigbuild --release --target ${{ matrix.target }}
+
+      - name: Copy binary (Linux)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          mkdir -p binaries
+          cp target/release/ifo binaries/ifo-${{ matrix.name }}
+          chmod +x binaries/ifo-${{ matrix.name }}
+
+      - name: Copy binary (cross-compiled Unix)
+        if: matrix.use_zigbuild && matrix.target != 'x86_64-pc-windows-gnu'
+        run: |
+          mkdir -p binaries
+          cp target/${{ matrix.target }}/release/ifo binaries/ifo-${{ matrix.name }}
+          chmod +x binaries/ifo-${{ matrix.name }}
+
+      - name: Copy binary (Windows)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        run: |
+          mkdir -p binaries
+          cp target/${{ matrix.target }}/release/ifo.exe binaries/ifo-${{ matrix.name }}.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.name }}
+          path: binaries/*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+
+          # Copy all binaries to release directory
+          cp artifacts/binary-linux-x86_64/ifo-linux-x86_64 release/
+          cp artifacts/binary-macos-x86_64/ifo-macos-x86_64 release/
+          cp artifacts/binary-macos-aarch64/ifo-macos-aarch64 release/
+          cp artifacts/binary-windows-x86_64/ifo-windows-x86_64.exe release/
+
+          cd release
+
+          # Create compressed archives for Unix platforms
+          tar -czf ifo-${GITHUB_REF_NAME}-linux-x86_64.tar.gz ifo-linux-x86_64
+          tar -czf ifo-${GITHUB_REF_NAME}-macos-x86_64.tar.gz ifo-macos-x86_64
+          tar -czf ifo-${GITHUB_REF_NAME}-macos-aarch64.tar.gz ifo-macos-aarch64
+
+          # Create zip archive for Windows
+          zip ifo-${GITHUB_REF_NAME}-windows-x86_64.zip ifo-windows-x86_64.exe
+
+          # Generate SHA256 checksums
+          sha256sum ifo-${GITHUB_REF_NAME}-*.tar.gz ifo-${GITHUB_REF_NAME}-*.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 'IFO ${{ github.ref_name }}'
+          body: |
+            # IFO ${{ github.ref_name }}
+
+            Blazing-fast Rust CLI for querying real-time aircraft data worldwide.
+
+            ## Installation
+
+            Download the appropriate binary for your platform below. See the [README](https://github.com/arnops/ifo/blob/main/README.md) for detailed installation instructions.
+
+            ### Verify Checksums
+
+            ```bash
+            # Download SHA256SUMS.txt and verify
+            sha256sum -c SHA256SUMS.txt
+            ```
+
+            ## Platforms
+
+            - **Linux x86_64**: `ifo-${{ github.ref_name }}-linux-x86_64.tar.gz`
+            - **macOS Intel**: `ifo-${{ github.ref_name }}-macos-x86_64.tar.gz`
+            - **macOS Apple Silicon**: `ifo-${{ github.ref_name }}-macos-aarch64.tar.gz`
+            - **Windows x86_64**: `ifo-${{ github.ref_name }}-windows-x86_64.zip`
+
+            ---
+
+            🤖 Built with [Claude Code](https://claude.com/claude-code)
+          files: |
+            release/ifo-${{ github.ref_name }}-linux-x86_64.tar.gz
+            release/ifo-${{ github.ref_name }}-macos-x86_64.tar.gz
+            release/ifo-${{ github.ref_name }}-macos-aarch64.tar.gz
+            release/ifo-${{ github.ref_name }}-windows-x86_64.zip
+            release/SHA256SUMS.txt
+          draft: false
+          prerelease: false

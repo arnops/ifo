@@ -1,0 +1,35 @@
+{
+	"name": "IFO Rust Development",
+	"image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+
+	"features": {
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {},
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "lts"
+		}
+	},
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"rust-lang.rust-analyzer",
+				"tamasfe.even-better-toml",
+				"serayuzgur.crates",
+				"vadimcn.vscode-lldb",
+				"anthropic.claude-code",
+				"openai.chatgpt"
+			],
+			"settings": {
+				"rust-analyzer.check.command": "clippy"
+			}
+		}
+	},
+
+	"postCreateCommand": "bash .devcontainer/setup.sh",
+
+	"remoteUser": "vscode",
+
+	"mounts": [
+		"source=ifo-cargo-cache,target=/usr/local/cargo/registry,type=volume"
+	]
+}

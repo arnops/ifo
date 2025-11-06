@@ -1,0 +1,17 @@
+{
+  "database": {
+    "path": ".chunkhound/db"
+  },
+  "search": {
+    "regex_enabled": true,
+    "max_results": 20
+  },
+  "indexing": {
+    "extensions": [
+      ".py", ".rs", ".toml", ".md", ".json", ".yaml", ".yml"
+    ],
+    "exclude_dirs": [
+      "target", "venv", "__pycache__", ".git", ".pytest_cache"
+    ]
+  }
+}

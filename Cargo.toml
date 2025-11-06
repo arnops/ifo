@@ -1,0 +1,42 @@
+[package]
+name = "ifo"
+version = "0.1.0"
+edition = "2021"
+authors = ["arnops"]
+description = "Blazing-fast CLI for querying real-time aircraft data"
+license = "MIT"
+repository = "https://gitlab.com/arnops/ifo"
+homepage = "https://gitlab.com/arnops/ifo"
+readme = "README.md"
+keywords = ["aviation", "aircraft", "tracking", "cli", "opensky"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+# Async HTTP
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["full"] }
+
+# JSON parsing
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Rate limiting
+governor = "0.6"
+nonzero = "0.1"
+
+[dev-dependencies]
+mockito = "1"
+tokio-test = "0.4"
+
+[profile.release]
+lto = true              # Link-time optimization
+codegen-units = 1       # Better optimization
+opt-level = 3           # Max optimization
+strip = true            # Strip debug symbols

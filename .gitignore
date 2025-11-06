@@ -1,0 +1,51 @@
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Build artifacts
+binaries/
+*.tar.gz
+*.zip
+SHA256SUMS.txt
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables and secrets
+.env
+.env.*
+.envrc
+
+# Credentials and certificates
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+secrets.json
+credentials.json
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# ChunkHound semantic search
+.chunkhound/
+
+# Devcontainer cache
+.cargo-cache/
